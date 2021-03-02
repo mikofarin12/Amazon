@@ -1,0 +1,330 @@
+---
+title: Final Project Report
+author: Miko Farin (704789591)
+date: "2 August 2019"
+output: 
+  prettydoc::html_pretty:
+    theme: hpstr
+    
+    highlight: github
+    toc: true
+    toc_depth: 6
+    number_sections: false
+    fig_caption: true
+    fig_width: 12
+    fig_height: 8
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(textdata)
+library(knitr)
+library(kableExtra)
+
+load("~/Desktop/AmazonFinal3.RData")
+```
+
+# Introduction: Importance of Legitamacy in Amazon Reviews
+
+Amazon is one of the largest online selling websites there is today by being able to sell quality products and having excellent customer service. One of the most helpful tools Amazon provides in helping customers choose products is the shopper's review section, in which a community of customers communicate with each other on the quality and satifaction of a product. Reviews are able to give important insight of the market, allow Amazon products with great reviews to be exposed to a greater audience, and provide a sense of community around the same genre of products. As the shopper's review section is very influenctial in swaying a customers decision in whether to buy a product or not, it is not only important to create safeguards in detecting fraudualent reviews that slander a product, but essential as we will discover the effects of not verifying reviews and verifying purchases. In this case study of Amazon data, we will explore a data set that provides information of purchased books, the sentiment of the books, and the reviews. This closer look will provide information to Amazon that will help them explore ways to improve their review section and help customers discover and explore new books with honest and real opinions.
+
+```{r,  include=FALSE}
+##extracts the data and combines the two files together
+mydata_Amazon <- inner_join (Amazon3A,Amazon3B, by = "review_id")
+
+#filters the data to only those that have 50 or more reviews for a product title
+filtering_50 <- count(mydata_Amazon, product_title)
+filtering_50 <- filter(filtering_50, n >= 50)
+filter_50 <- filtering_50$product_title
+
+## a for loop that creates two data frames, one for creating Books with 50 reviews, and one for Mean Star ratings
+Books_with_50_reviews <- data.frame()
+Mean_Star_Ratings <- data_frame()
+for(i in 1:length(filter_50)){
+      xBook <- filter(mydata_Amazon, product_title == filter_50[i])
+      mean_books <- xBook[c(3,7:9)]
+      mean_books <- mean_books [1,]
+      mean_books[3]<- apply(xBook[8], 2, mean)
+      Mean_Star_Ratings <- rbind(Mean_Star_Ratings,mean_books )
+      Books_with_50_reviews <- rbind(Books_with_50_reviews,xBook)
+}
+rm(mean_books,xBook,filter_50,i,filtering_50)
+
+##Takes in the Mean Star ratings table, orders the table and creates a new table for the Ordered Mean Star Ratings
+Ordered_Mean_Star_Ratings <- arrange(Mean_Star_Ratings,-star_rating)
+Top_two_Bottom_two <- Ordered_Mean_Star_Ratings[c(1,2,189,190),]
+Whole_Data_Top_two_Bottom_two <- data_frame()
+for(i in 1:4){
+  Desired<- filter(mydata_Amazon, product_title == Top_two_Bottom_two[[i,1]])
+  Whole_Data_Top_two_Bottom_two <- rbind(Whole_Data_Top_two_Bottom_two, Desired)
+}
+rm(Desired,i)
+
+##this function is to perform a detailed analysis of the 4 titles, uses the sentiments function and calculates the mean of the centiments
+four_books <- unique(Whole_Data_Top_two_Bottom_two$product_title)
+mean_of_words_sentments <- data_frame()
+count_of_reviews <- data.frame()
+for(i in 1:4){
+  count_of_reviews<- rbind(count_of_reviews,count(filter(Whole_Data_Top_two_Bottom_two, product_title == four_books[i])))
+  sentiment  <- filter(Whole_Data_Top_two_Bottom_two, product_title == four_books[i])%>%
+                unnest_tokens(word, review_body) %>%
+                inner_join(get_sentiments("afinn"), by = "word") %>%
+                group_by(review_id) %>%
+                summarize(sentiment = mean(value), words = n())
+ 
+mean_of <- t(apply(sentiment[c(2,3)], 2, mean))
+mean_of_words_sentments <- rbind(mean_of_words_sentments, mean_of )
+}
+
+rm(i,mean_of,sentiment)
+
+##rest of the line of code is to count the number of revies, and then create a finished table of the number of reviews, product title, sentiment, etc.
+
+names(count_of_reviews) <- c("Number of Reviews")
+Finished_Data_Four_Books <- cbind(count_of_reviews,Top_two_Bottom_two[,c(1,3:4)],mean_of_words_sentments)
+names(Finished_Data_Four_Books) <- c("Number of Reviews","Product Title", "Mean Star Rating", "Product ID", "Average Sentiment Score", "Average Number of Words")
+
+#Top Ten Words for Rush Revere
+Top_Ten_Words1<- filter(Whole_Data_Top_two_Bottom_two, product_title == four_books[1]) %>%
+  unnest_tokens(word, review_body) %>%
+  count(word, sort = TRUE)
+Top_Ten_Words1 <- Top_Ten_Words1 %>%  
+  ungroup() %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(word) %>%
+  mutate(contribution = value*n) %>%
+  arrange(desc(abs(contribution)))
+
+#Top Ten Words for A Higher Call: An Incredible True Story of Combat and Chivalry in the War-Torn Skies of World War II
+Top_Ten_Words2<- filter(Whole_Data_Top_two_Bottom_two, product_title == four_books[2]) %>%
+  unnest_tokens(word, review_body) %>%
+  count(word, sort = TRUE)
+Top_Ten_Words2 <- Top_Ten_Words2 %>%  
+  ungroup() %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(word) %>%
+  mutate(contribution = value*n) %>%
+  arrange(desc(abs(contribution)))
+
+#Top Ten Words for Allegiant (Divergent Series)
+Top_Ten_Words3<- filter(Whole_Data_Top_two_Bottom_two, product_title == four_books[3]) %>%
+  unnest_tokens(word, review_body) %>%
+  count(word, sort = TRUE)
+Top_Ten_Words3 <- Top_Ten_Words3 %>%  
+  ungroup() %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(word) %>%
+  mutate(contribution = value*n) %>%
+  arrange(desc(abs(contribution)))
+
+#Top Ten Words for It Could Happen To Anyone: Why Battered Women Stay
+Top_Ten_Words4<- filter(Whole_Data_Top_two_Bottom_two, product_title == four_books[4]) %>%
+  unnest_tokens(word, review_body) %>%
+  count(word, sort = TRUE)
+Top_Ten_Words4 <- Top_Ten_Words4 %>%  
+  ungroup() %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(word) %>%
+  mutate(contribution = value*n) %>%
+  arrange(desc(abs(contribution)))
+
+```
+
+# The Data: Sample Book Reviews from Amazon
+
+## Raw Dataset Variables from the Amazon Dataset:
+
+customer_id -Random identifier that can be used to aggregate reviews written by a single author.
+
+review_id -The unique ID of the review.
+
+product_id -The unique Product ID of the reviewed item.
+
+product_parent -An identifier that can be used to aggregate reviews for the same product. 
+
+product_title -English Title of the product.
+
+star_rating -The 1-5 star rating of the review.
+
+helpful_votes -Number of helpful votes given to the review. 
+
+total_votes -Number of total votes the review received.
+
+vine - Review was written as part of the Vine program. Amazon invites customers to become Vine Voices based on their reviewer rank, which is a reflection of the quality and helpfulness of their reviews as judged by other Amazon customers. Amazon provides Vine members with free products that have been submitted to the program by participating vendors.
+
+verified_purchase -The review is on a verified purchase.
+
+review_headline -The title of the review. 
+
+review_body -There view text.
+
+review_date -The date the review was written.
+
+## Books with at Least 50 Reviews, Ordered by Mean Star Ratings
+
+One way to help both the customer and seller is to order the books that have at least 50 reviews by the average rating. With this, customers have buying confidence within a product because the amount of reviews the product has is significant. As the number of reviews become a suffiecient amount, the review_star mean holds more value. The product can now be marketed with more emphasis, such as being on the top of a webpage or at the home of Amazon.com as it has been proven to be a satisfactory product. By extracting this data, customers will buy more as their confidence rises and sellers that provide products will have an incetive to sell quality products as their products will be rated and be marketed by such ratings.
+
+
+```{r,  comment = '', echo= FALSE}
+
+kable(Ordered_Mean_Star_Ratings[-2]) %>%
+  kable_styling(bootstrap_options = "striped", position = "center") %>%
+  scroll_box(width = "100%", height = "300px")
+```
+
+# The Questions: Providing Statistical Summary/Review for the Books in the datasets
+
+
+## 1(a) and 1(b): What are the Top 2 Highest Rated and Top 2 Lowest Rated Books? Detailed Analysis
+
+### Ordered Table: Top 2 and Bottom 2
+
+```{r,  comment = '', echo=FALSE}
+kable(Finished_Data_Four_Books) %>%
+  kable_styling(position = "center", bootstrap_options = "striped")
+```
+
+### Top Ten Contributing Words for Top 2 and Bottom 2 Sentiment Score of Books: 
+```{r,  comment = '', echo=FALSE}
+kable(rbind(Top_Ten_Words1[1:10,], Top_Ten_Words2[1:10,], Top_Ten_Words3[1:10,], Top_Ten_Words4[1:10,])) %>%
+  kable_styling(full_width = T) %>%
+  pack_rows("Rush Revere and the American Revolution: Time-Travel Adventures With Exceptional Americans", 1, 10) %>%
+  pack_rows("A Higher Call: An Incredible True Story of Combat and Chivalry in the War-Torn Skies of World War II", 11, 20) %>%
+  pack_rows("Allegiant (Divergent Series)", 21, 30) %>%
+  pack_rows("It Could Happen To Anyone: Why Battered Women Stay", 31, 40) %>%
+  scroll_box(width = "100%", height = "500px") 
+```
+
+n = number of times used, value = sentiment score, contribution = total contribution to overall sentiment score
+
+### Improvement of Code for Sentiment Score in Question 1:
+
+As we take a deeper look within the Top 10 words that contribute to the sentiment score, we can see that although we have assigned words with a score, there may be problems within the affin package as it assigns words such as "victim", "abuse", and "murder" negative sentiment. These words may not be scored in the correct context in reviews as they may be words that just describe the plot of the book and not the overall satisfaction of the book. Words such as "love", "like", and "excellent" are highly valued in the affin score and may or may not be talking about the overall book but quotes. Overall, we have choosen an easy way to be able to score sentiment within reviews, but some of the sentiment may be taken out of context. Furthermore down the road, we may improve on the code and add regular expressions to look more closely into the context of the words within the reviews.
+
+
+## 2. Graphic Visualization of the Importance of Verifying Purchases for Reviews
+
+```{r,  comment = '', echo=FALSE, fig.align= 'center' }
+sentiment_for_Books  <-  Books_with_50_reviews %>%
+  unnest_tokens(word, review_body) %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(review_id) %>%
+  summarize(sentiment = mean(value), words = n()) %>%
+  filter(words >= 3)
+sentiment_for_Books2 <- left_join(sentiment_for_Books, Books_with_50_reviews, by =  "review_id")
+
+ggplot(sentiment_for_Books2 %>% filter(helpful_votes > 3), aes( y = sentiment, x = star_rating, color = verified_purchase)) + 
+  geom_jitter()+ 
+  ggtitle("Verified vs. Non-Verified (Sentiment and Star Rating)")  +
+  ylab("Sentiment" )+
+  xlab("Star Rating" )+
+  labs(fill = "Helpful Votes")+
+  theme_linedraw() +
+  theme (plot.title = element_text(hjust = 0.5, size=20, face = "bold.italic"),
+         axis.title.y.left = element_text(size = 16, face= "bold"),
+         axis.title.x.bottom = element_text(size=16, face = "bold"),
+         legend.title = element_text(size = 16), 
+         legend.text = element_text(size = 12),
+         axis.text.x.bottom = element_text(size = 10),
+         axis.text.y.left = element_text(size = 10),
+  )
+```
+
+### Review of the Table for 2: What does it mean?
+
+The data I have choosen to extract and show on the data table is the variable of a review of a verified purchase or not. A review that has a verified purchase means that the review is done by a person that is known to have recieved and purchased the product and has written a review on it. Although reviews that have not been able to be verified carries credence, it is unknown whether the reviewer is basing his opinion based on facts or just creating a "troll" or putting down products for a purpose that is unknown. The verification is meant to clean up the review section, as it creates a harder path to pay for reviews, cheat the system, and make a product "satisfactory" even though the reviews aren't from purchases of the product. Now looking at the data, we have seperated the plot points between two main groups, Verified(Blue) and Non-Verified(Red) and based it on a scale of sentiment of words and star rating. As shown in the plot, we see that most of the reviews that have not been verified are shown to have a very high denisty of star rating of 1. and the sentiment is shown to be around 0. This may cause speculation on whether the purpose of the review is actually helpful or a personal vendetta to push their competition down for their own products on Amazon to sell more. On the other hand has we go deeper into the star rating, we see the shift in color from red to more of a bluish tint, showing people who have been known to make a purchase have resulted in more of satisfaction of the product. I have also created a filter that only allows the points plotted to have 4 or more helpful votes, which means many people see these reviews as helpful. The data shows that if Amazon is able to verify purchases, not only does it make the review more reliable, but the star rating and sentiment improve and cause products to be more appealing. Investing in more verification of sales, may lead to more products being sold and increase revenue.
+
+
+
+## 3. A Deeper Dive into the Data and New Way Ways to Improve Legitamcy:
+
+### Ways of Improvement by Reviewing Customer ID:
+A way to detect and filter out reviewers that are legitimate or not, is reviewing each unique reviewer and the activity the reviewer performs with each review. The screening process will go as stated:
+
+1.Take a unique Customer ID
+
+2.Check the number of helpful votes
+
+3.Review the type of language the person
+Uses, by using sentiment packages and 
+Reviewing the words that we consider
+vulgar using regular expressions. 
+
+4.Check the ratio of verified reviews vs. non-verified 
+reviews the person makes.
+
+5.The amount of reviews a person makes per year to be able to see if the person is a bot or given to many reviews and the average rating on each review.
+
+6.Lastly, determine whether the person is honest with reviews by scoring each section and comparing it to a pre-determined scale by Amazon.
+
+### Pseudocode/R Code based on my ideas:
+
+```{r, comment= "",error=TRUE, eval=FALSE}
+#Take a unique Customer ID:
+unique_customer_id <- unique(mydata_Amazon$customer_id.x)
+
+##screens the Customer
+##creates a dataframe combining all the unique customer ID's information Customer ID",
+##Total Number of Helpful Votes
+##Number of Verified Purchases
+##Number of Non-verified Purchases
+##Mean Star Rating
+##Average Sentiment
+##Average Number of Words
+##Amount of Votes a person makes per year
+##checks if there is vulgar language
+
+screening_for_customer<- data.frame()
+for (i in 1:count(unique_customer_id)){
+     ##gets the data of one unique data for a customer
+     data_for_customer <- filter(mydata_Amazon, customer_id.x == unique_customer_id[i])
+     ##adds the amount of helpful votes
+     total_number_of_helpful_votes <- sum(data_for_customer$helpful_votes)
+     ##counts the number reviews with a verified purchased
+     number_of_verified_for_customer<- count((filter(data_for_customer, verified_purchase == "Y")))
+     ##counts the number reviews with a non-verified purchased
+     number_of_nonverified_for_customer<- count((filter(data_for_customer, verified_purchase == "N")))
+     ##takes the mean of the star rating per review
+     mean_data_for_star_rating<- mean(data_for_customer$star_rating)
+     
+     ##creates the sentiment score... you are able to replace the affin document with any language sentiment package
+     sentiment  <-  data_for_customer %>%
+                    unnest_tokens(word, review_body) %>%
+                    inner_join(get_sentiments("afinn"), by = "word") %>%
+                    group_by(review_id) %>%
+                    filter(words >= 3) %>%
+                    summarize (sentiment = mean(value), words = n())
+     
+     ###checking for vulgar language(constructed, but doesn't work)
+      logical_expression_for_language <- grepl(pattern = "(Fu..|Bad Word|Bad Word)", x = data_for_customer$review_body)
+      apply(logical_expression_for_language, function(x){ logical_answer <- ifelse(x > 0,1,0) 
+       if(any(logical_answer==0)){ 
+      return(TRUE)}})
+     
+     ##takes the mean of sentiment
+     mean_of_words_and_sentiment <- t(apply(sentiment[2:3],2,mean))
+     
+     ##check the amount of reviews per year...
+     ##use filtering such as selectbydata() ,filter(mydata, date("":"")) or library(lubridate) to use function as.Date
+     ##once I select the year, I then calculate the sum of the reviews, and I continue the process for each year that the Amazon Dataset has
+     
+     
+     ##combines the data into one data frame
+     data_for_customer<- cbind(...)
+    
+      ##takes the finished data frame and combines it with the rest
+      screening_for_customer <- rbind(screening_for_customer,data_for_customer)
+}
+
+
+```
+
+
+# Conclusion
+
+In conclusion, as Amazon continues to grow and more people join the online market, it is important to have every tool that a customer uses in making a purchase legitimate and honest. Amazon customers have become more aware of fake news and fake reviews, and the sellers have increasingly cheat the system by paying hundreds to inflate their ratings the safeguard of trust in online buying is critical. The verification of purchases combats all the false advertisements, increase conversation and trust within the online markets. Although updates and protection such as limiting the amount of reviews a person can post, not allowing people who have recieved a discount or even given the product for free to post and incentivized customers are prohibited, Amazon must continue to set measure and updates to verify honest reviews. It will not only be beneficial to the company, but also increase public opinion on the online market.
+
